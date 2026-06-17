@@ -5,17 +5,21 @@
 #include <arpa/inet.h>
 #include <mysql/mysql.h>
 
-int main()
+typedef struct {
+    float temperature;
+    float humidite;
+    float pression;
+} Mesure;
+
+// Variables globales
+int socket_ecoute;
+
+/*
+    Fonctions réseau
+*/
+int ouvrir_socket_serveur()
 {
-    int socket_ecoute;
-    int socket_client;
-    socklen_t taille_adresse_client;
     struct sockaddr_in adresse_serveur;
-    struct sockaddr_in adresse_client;
-    char tampon[1024];
-    float *mesures;
-    MYSQL *bdd;
-    char q[512];
 
     socket_ecoute = socket(AF_INET, SOCK_STREAM, 0);
     // TODO: vérifier valeur retour != -1 erreur
@@ -30,6 +34,42 @@ int main()
     listen(socket_ecoute, 5);
     // TODO:  Retour : 0 si succès, -1 si erreur.
 
+    return 0;
+}
+
+Mesure lire_socket_mesure_poll()
+{
+    socklen_t taille_adresse_client;
+    struct sockaddr_in adresse_client;
+    int socket_client;
+    char tampon[1024];
+    Mesure mesure;
+
+    taille_adresse_client = sizeof(adresse_client);
+    socket_client = accept(socket_ecoute, (struct sockaddr*)&adresse_client, &taille_adresse_client);
+    // TODO: Retour : un nouveau descripteur de socket (int ≥ 0) pour ce client, -1 si erreur.
+
+    read(socket_client, tampon, sizeof(tampon));
+    memcpy(&mesure, tampon, sizeof(Mesure));
+    // TODO: Retour : nombre d'octets réellement lus (ssize_t), 0 si le client a fermé la connexion, -1 si erreur.
+
+    close(socket_client);
+    // TODO: Retour : 0 si succès, -1 si erreur.
+
+    return mesure;
+}
+
+int main()
+{
+    Mesure mesure;
+    MYSQL *bdd;
+    char q[512];
+
+    ouvrir_socket_serveur(&socket_ecoute);
+    if (socket_ecoute == -1) {
+        printf("erreur ouverture socket serveur");
+    }
+
     bdd = mysql_init(NULL);
     // TODO: vérifier Retour : MYSQL* initialisé, ou NULL si mémoire insuffisante.
     mysql_real_connect(bdd, "localhost", "meteo", "abcd", "meteo", 0, NULL, 0);
@@ -38,29 +78,14 @@ int main()
     // TODO: permettre l'arret du process avec un signal pour un arret propre
     while(1)
     {
-        taille_adresse_client = sizeof(adresse_client);
-        socket_client = accept(socket_ecoute, (struct sockaddr*)&adresse_client, &taille_adresse_client);
-        // TODO: Retour : un nouveau descripteur de socket (int ≥ 0) pour ce client, -1 si erreur.
+        mesure = lire_socket_mesure_poll();
 
-        read(socket_client, tampon, 1024);
-        // TODO: Retour : nombre d'octets réellement lus (ssize_t), 0 si le client a fermé la connexion, -1 si erreur.
-
-        mesures = (float*)tampon;
-
-        float temperature = mesures[0];
-        float humidite = mesures[1];
-        float pression = mesures[2];
-        // TODO: vérifier la validité des valeurs lues et de la taille du buffer
-
-        sprintf(q, "INSERT INTO data VALUES(%f,%f,%f)", temperature, humidite, pression);
+        sprintf(q, "INSERT INTO data VALUES(%f,%f,%f)", mesure.temperature, mesure.humidite, mesure.pression);
 
         mysql_query(bdd, q);
         // TODO: vérfifier  Retour : int — 0 si succès, ≠ 0 si erreur.
 
-        printf("temperature=%f humidite=%f pression=%f\n", temperature, humidite, pression);
-
-        close(socket_client);
-        // TODO: Retour : 0 si succès, -1 si erreur.
+        printf("temperature=%f humidite=%f pression=%f\n", mesure.temperature, mesure.humidite, mesure.pression);
     }
 
     mysql_close(bdd);
