@@ -13,6 +13,7 @@ typedef struct {
 
 // Variables globales
 int socket_ecoute;
+MYSQL *bdd;
 
 /*
     Fonctions réseau
@@ -59,33 +60,58 @@ Mesure lire_socket_mesure_poll()
     return mesure;
 }
 
+/*
+    Fonctions BDD
+*/
+int ouvrir_bdd()
+{
+    bdd = mysql_init(NULL);
+    // TODO: vérifier Retour : MYSQL* initialisé, ou NULL si mémoire insuffisante.
+    mysql_real_connect(bdd, "localhost", "meteo", "abcd", "meteo", 0, NULL, 0);
+    // TODO: vérifier Retour : MYSQL* (= bdd) si succès, NULL si échec (connexion refusée, mauvais identifiants…).
+
+    return 0;
+}
+
+int inserer_mesure(Mesure mesure)
+{
+    char q[512];
+
+    sprintf(q, "INSERT INTO data VALUES(%f,%f,%f)", mesure.temperature, mesure.humidite, mesure.pression);
+    mysql_query(bdd, q);
+        // TODO: vérfifier  Retour : int — 0 si succès, ≠ 0 si erreur.
+
+    return 0;
+}
+
+/* Foncton affichage
+*/
+
+void afficher_mesure(Mesure mesure)
+{
+    printf("temperature=%f humidite=%f pression=%f\n", mesure.temperature, mesure.humidite, mesure.pression);
+}
+
+
 int main()
 {
     Mesure mesure;
-    MYSQL *bdd;
-    char q[512];
 
     ouvrir_socket_serveur(&socket_ecoute);
     if (socket_ecoute == -1) {
         printf("erreur ouverture socket serveur");
     }
 
-    bdd = mysql_init(NULL);
-    // TODO: vérifier Retour : MYSQL* initialisé, ou NULL si mémoire insuffisante.
-    mysql_real_connect(bdd, "localhost", "meteo", "abcd", "meteo", 0, NULL, 0);
-    // TODO: vérifier Retour : MYSQL* (= bdd) si succès, NULL si échec (connexion refusée, mauvais identifiants…).
+    ouvrir_bdd();
 
     // TODO: permettre l'arret du process avec un signal pour un arret propre
     while(1)
     {
         mesure = lire_socket_mesure_poll();
 
-        sprintf(q, "INSERT INTO data VALUES(%f,%f,%f)", mesure.temperature, mesure.humidite, mesure.pression);
+        inserer_mesure(mesure);
 
-        mysql_query(bdd, q);
-        // TODO: vérfifier  Retour : int — 0 si succès, ≠ 0 si erreur.
-
-        printf("temperature=%f humidite=%f pression=%f\n", mesure.temperature, mesure.humidite, mesure.pression);
+        afficher_mesure(mesure);
     }
 
     mysql_close(bdd);
